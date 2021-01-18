@@ -20,7 +20,7 @@ from mythril.laser.smt import SolverStatistics
 from mythril.support.start_time import StartTime
 from mythril.exceptions import DetectorNotFoundError
 from mythril.laser.execution_info import ExecutionInfo
-
+from mythril.wei_temp.ftn_selector import get_ftn_selector_byte_list_2
 log = logging.getLogger(__name__)
 
 
@@ -50,6 +50,7 @@ class MythrilAnalyzer:
         parallel_solving: bool = False,
         call_depth_limit: int = 3,
         solver_log: Optional[str] = None,
+        ftn_sequences='', #@wei
     ):
         """
 
@@ -57,6 +58,8 @@ class MythrilAnalyzer:
         :param requires_dynld: whether dynamic loading should be done or not
         :param onchain_storage_access: Whether onchain access should be done or not
         """
+
+        self.ftn_sequeces_byte_list=(get_ftn_selector_byte_list_2(ftn_sequences) if ftn_sequences is not None else '') #@wei
         self.eth = disassembler.eth
         self.contracts = disassembler.contracts or []  # type: List[EVMContract]
         self.enable_online_lookup = disassembler.enable_online_lookup
@@ -94,6 +97,7 @@ class MythrilAnalyzer:
             disable_dependency_pruning=self.disable_dependency_pruning,
             run_analysis_modules=False,
             custom_modules_directory=self.custom_modules_directory,
+            ftn_sequences_byte_list=self.ftn_sequeces_byte_list, #@wei
         )
 
         return get_serializable_statespace(sym)
@@ -126,6 +130,7 @@ class MythrilAnalyzer:
             disable_dependency_pruning=self.disable_dependency_pruning,
             run_analysis_modules=False,
             custom_modules_directory=self.custom_modules_directory,
+            ftn_sequences_byte_list=self.ftn_sequeces_byte_list,  # @wei
         )
         return generate_graph(sym, physics=enable_physics, phrackify=phrackify)
 
@@ -160,6 +165,7 @@ class MythrilAnalyzer:
                     compulsory_statespace=False,
                     disable_dependency_pruning=self.disable_dependency_pruning,
                     custom_modules_directory=self.custom_modules_directory,
+                    ftn_sequences_byte_list=self.ftn_sequeces_byte_list,  # @wei
                 )
                 issues = fire_lasers(sym, modules)
                 execution_info = sym.execution_info

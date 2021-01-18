@@ -35,6 +35,8 @@ from mythril.analysis.module import ModuleLoader
 
 from mythril.__version__ import __version__ as VERSION
 
+
+
 # Initialise core Mythril Component
 _ = MythrilPluginLoader()
 
@@ -369,12 +371,16 @@ def create_analyzer_parser(analyzer_parser: ArgumentParser):
     :param analyzer_parser:
     :return:
     """
+
     analyzer_parser.add_argument(
         "solidity_files",
         nargs="*",
         help="Inputs file name and contract name. \n"
         "usage: file1.sol:OptionalContractName file2.sol file3.sol:OptionalContractName",
     )
+
+
+
     commands = analyzer_parser.add_argument_group("commands")
     commands.add_argument("-g", "--graph", help="generate a control flow graph")
     commands.add_argument(
@@ -383,6 +389,10 @@ def create_analyzer_parser(analyzer_parser: ArgumentParser):
         help="dumps the statespace json",
         metavar="OUTPUT_FILE",
     )
+    #@wei
+    commands.add_argument("-ftn", "--ftn_sequences",
+                          help="provide the list of function selectors of a set of function sequences")
+
     commands.add_argument("--infura-id", help="set infura id for onchain analysis")
 
     options = analyzer_parser.add_argument_group("options")
@@ -682,6 +692,7 @@ def execute_command(
 
     elif args.command in ANALYZE_LIST:
         analyzer = MythrilAnalyzer(
+            ftn_sequences=args.ftn_sequences,  # @wei
             strategy=args.strategy,
             disassembler=disassembler,
             address=address,
@@ -700,6 +711,7 @@ def execute_command(
             sparse_pruning=args.sparse_pruning,
             unconstrained_storage=args.unconstrained_storage,
             solver_log=args.solver_log,
+
         )
 
         if not disassembler.contracts:

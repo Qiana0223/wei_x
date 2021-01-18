@@ -26,11 +26,13 @@ from mythril.laser.ethereum.transaction import (
     TransactionStartSignal,
     execute_contract_creation,
     execute_message_call,
+    execute_message_call_1,
 )
 from mythril.laser.smt import symbol_factory
 from mythril.support.support_args import args
 
 log = logging.getLogger(__name__)
+
 
 
 class SVMError(Exception):
@@ -60,6 +62,7 @@ class LaserEVM:
         transaction_count=2,
         requires_statespace=True,
         iprof=None,
+        ftn_sequences_byte_list=[], #@wei
     ) -> None:
         """
         Initializes the laser evm object
@@ -73,6 +76,7 @@ class LaserEVM:
         :param requires_statespace: Variable indicating whether the statespace should be recorded
         :param iprof: Instruction Profiler
         """
+        self.ftn_sequences_byte_list = ftn_sequences_byte_list #@wei
         self.execution_info = []  # type: List[ExecutionInfo]
 
         self.open_states = []  # type: List[WorldState]
@@ -115,6 +119,7 @@ class LaserEVM:
             self.instr_post_hook[op] = []
         log.info("LASER EVM initialized with dynamic loader: " + str(dynamic_loader))
 
+
     def extend_strategy(self, extension: ABCMeta, *args) -> None:
         self.strategy = extension(self.strategy, args)
 
@@ -152,7 +157,9 @@ class LaserEVM:
         if pre_configuration_mode:
             self.open_states = [world_state]
             log.info("Starting message call transaction to {}".format(target_address))
-            self._execute_transactions(symbol_factory.BitVecVal(target_address, 256))
+            if len(self.ftn_sequences_byte_list)==0:
+                self._execute_transactions(symbol_factory.BitVecVal(target_address, 256))
+            else:self._execute_transactions_1(symbol_factory.BitVecVal(target_address, 256))
 
         elif scratch_mode:
             log.info("Starting contract creation transaction")
@@ -171,9 +178,9 @@ class LaserEVM:
                     "No contract was created during the execution of contract creation "
                     "Increase the resources for creation execution (--max-depth or --create-timeout)"
                 )
-
-            self._execute_transactions(created_account.address)
-
+            if len(self.ftn_sequences_byte_list) == 0:
+                self._execute_transactions(created_account.address)
+            else:self._execute_transactions_1(created_account.address)
         log.info("Finished symbolic execution")
         if self.requires_statespace:
             log.info(
@@ -217,6 +224,50 @@ class LaserEVM:
 
             for hook in self._stop_sym_trans_hooks:
                 hook()
+
+    def _execute_transactions_1(self, address): #@wei
+        """This function executes multiple transactions on the address
+
+        :param address: Address of the contract
+        :return:
+        """
+        self.time = datetime.now()
+        global_states = []
+        # ftn_sequences = [["e8b5e51f", "2cc82655", "3ccfd60b"],
+        #                  ["e8b5e51f", "2cc82655", "590e1ae3"],
+        #                  ["13af4035"]]
+        # ftn_seq_bytes_list = get_ftn_selector_byte_list(ftn_sequences)
+        initial_open_states = self.open_states
+        # for i in range(len(ftn_sequences)):
+        for i in range(len(self.ftn_sequences_byte_list)):
+            print(f'==== sequence {i + 1} ====')
+            self.open_states = initial_open_states  # make sure each function sequence start with the initial state
+            for j in range(len(self.ftn_sequences_byte_list[i])):
+                print(f'==== sequence {i + 1}, the {j + 1} function ====')
+
+                if len(self.open_states) == 0:
+                    break
+                old_states_count = len(self.open_states)
+                self.open_states = [
+                    state for state in self.open_states if state.constraints.is_possible
+                ]
+                prune_count = old_states_count - len(self.open_states)
+                if prune_count:
+                    log.info("Pruned {} unreachable states".format(prune_count))
+
+                # self.print_open_states()
+                log.info(
+                    "Starting message call transaction, iteration: i: {}; j: {}, {} initial states".format(
+                        i, j, len(self.open_states)
+                    )
+                )
+                for hook in self._start_sym_trans_hooks:
+                    hook()
+                global_states = execute_message_call_1(self, address, self.ftn_sequences_byte_list[i][j])
+                for hook in self._stop_sym_trans_hooks:
+                    hook()
+                # # print final global states after each symbolic transaction
+                # self.print_final_global_state(global_states)
 
     def _check_create_termination(self) -> bool:
         if len(self.open_states) != 0:
